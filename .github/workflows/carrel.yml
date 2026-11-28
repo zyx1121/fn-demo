@@ -2,15 +2,19 @@ name: carrel
 on:
   push:
     branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 permissions:
   contents: read
   packages: write
   id-token: write
-# One deploy at a time: a push waits for the build before it.
-concurrency: carrel-demo
+  pull-requests: write
+# One deploy at a time per branch or pull request.
+concurrency: carrel-demo-${{ github.event.pull_request.number || 'main' }}
 jobs:
   deploy:
+    if: github.event.action != 'closed' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,8 +32,20 @@ jobs:
           platforms: linux/amd64
           tags: ghcr.io/zyx1121/fn-demo:${{ github.sha }}
           build-args: COMMIT=${{ github.sha }}
+      # On a pull request this deploys the preview and comments its URL.
       - uses: NYCU-WinLab/carrel-deploy@v2
         with:
+          url: https://carrel.winlab.tw
           tenant: zyx1121
           service: demo
           image: ghcr.io/zyx1121/fn-demo@${{ steps.image.outputs.digest }}
+  close:
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: NYCU-WinLab/carrel-deploy@v2
+        with:
+          url: https://carrel.winlab.tw
+          tenant: zyx1121
+          service: demo
+          close-preview: true
